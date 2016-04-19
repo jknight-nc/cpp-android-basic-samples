@@ -260,11 +260,20 @@ void Engine::InviteFriend() {
  * Broadcast my score to peers
  */
 void Engine::BroadcastScore(bool bFinal) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  
   std::vector<uint8_t> v;
   if (!bFinal) {
     v.push_back('U');
     v.push_back(static_cast<uint8_t>(score_counter_));
-    service_->RealTimeMultiplayer().SendUnreliableMessageToOthers(room_, v);
+    score_counter_++;
+    const std::vector<gpg::MultiplayerParticipant> participants =
+        room_.Participants();
+    for (gpg::MultiplayerParticipant participant : participants) {
+      LOGI("[DataSent] %d", v[1]);
+      service_->RealTimeMultiplayer().SendReliableMessage(
+          room_, participant, v, [](gpg::MultiplayerStatus const &) {});
+    }
   } else {
     v.push_back('F');
     v.push_back(static_cast<uint8_t>(score_counter_));
@@ -298,10 +307,11 @@ void Engine::OnDataReceived(gpg::RealTimeRoom const &room,
     players_score_[from_participant.Id()].finished = true;
     LOGI("Got final data from Dispname:%s ID:%s",
          from_participant.DisplayName().c_str(), from_participant.Id().c_str());
-  } else if (data[0] == 'U' && !is_reliable) {
+  } else if (data[0] == 'U') {
     // Got current score
     uint8_t score = players_score_[from_participant.Id()].score;
     players_score_[from_participant.Id()].score = std::max(score, data[1]);
+    LOGI("[OnDataReceived] %d", data[1]);
     LOGI("Got data from Dispname:%s ID:%s",
          from_participant.DisplayName().c_str(), from_participant.Id().c_str());
   }
@@ -377,7 +387,7 @@ void Engine::PlayGame() {
       switch (message) {
         case jui_helper::JUICALLBACK_BUTTON_UP: {
           if (!playing_) return;
-          score_counter_++;
+          // score_counter_++;
           UpdateScore();
           UpdateTime();
 
@@ -403,6 +413,7 @@ void Engine::PlayGame() {
     scores_text_->SetAttribute("Padding", 10, 10, 10, 10);
 
     UpdateScore();
+    
 
     dialog_->AddView(my_score_text_);
     dialog_->AddView(button_play_);
@@ -431,6 +442,10 @@ void Engine::PlayGame() {
                   while (UpdateTime()) {
                     std::chrono::milliseconds d(100);
                     std::this_thread::sleep_for(d);
+
+                    BroadcastScore(false);
+                    BroadcastScore(false);
+
                   }
                   // Broadcast my score to others via reliable protocol
                   BroadcastScore(true);
@@ -701,6 +716,8 @@ JNIEXPORT void
 Java_com_google_example_games_ButtonClicker_ButtonClickerNativeActivity_nativeOnActivityResult(
     JNIEnv *env, jobject thiz, jobject activity, jint requestCode,
     jint resultCode, jobject data) {
+
+  LOGI("ButtonClickerNativeActivity nativeOnActivityResult");
   gpg::AndroidSupport::OnActivityResult(env, activity, requestCode, resultCode,
                                         data);
 }
@@ -708,42 +725,49 @@ Java_com_google_example_games_ButtonClicker_ButtonClickerNativeActivity_nativeOn
 JNIEXPORT void
 Java_com_google_example_games_ButtonClicker_ButtonClickerNativeActivity_nativeOnActivityCreated(
     JNIEnv *env, jobject thiz, jobject activity, jobject saved_instance_state) {
+  LOGI("ButtonClickerNativeActivity nativeOnActivityCreated");
   gpg::AndroidSupport::OnActivityCreated(env, activity, saved_instance_state);
 }
 
 JNIEXPORT void
 Java_com_google_example_games_ButtonClicker_ButtonClickerNativeActivity_nativeOnActivityDestroyed(
     JNIEnv *env, jobject thiz, jobject activity) {
+  LOGI("ButtonClickerNativeActivity nativeOnActivityDestroyed");
   gpg::AndroidSupport::OnActivityDestroyed(env, activity);
 }
 
 JNIEXPORT void
 Java_com_google_example_games_ButtonClicker_ButtonClickerNativeActivity_nativeOnActivityPaused(
     JNIEnv *env, jobject thiz, jobject activity) {
+  LOGI("ButtonClickerNativeActivity nativeOnActivityPaused");
   gpg::AndroidSupport::OnActivityPaused(env, activity);
 }
 
 JNIEXPORT void
 Java_com_google_example_games_ButtonClicker_ButtonClickerNativeActivity_nativeOnActivityResumed(
     JNIEnv *env, jobject thiz, jobject activity) {
+  LOGI("ButtonClickerNativeActivity nativeOnActivityResumed");
   gpg::AndroidSupport::OnActivityResumed(env, activity);
 }
 
 JNIEXPORT void
 Java_com_google_example_games_ButtonClicker_ButtonClickerNativeActivity_nativeOnActivitySaveInstanceState(
     JNIEnv *env, jobject thiz, jobject activity, jobject out_state) {
+  LOGI("ButtonClickerNativeActivity nativeOnActivitySavedInstanceState");
   gpg::AndroidSupport::OnActivitySaveInstanceState(env, activity, out_state);
 }
 
 JNIEXPORT void
 Java_com_google_example_games_ButtonClicker_ButtonClickerNativeActivity_nativeOnActivityStarted(
     JNIEnv *env, jobject thiz, jobject activity) {
+  LOGI("ButtonClickerNativeActivity nativeOnActivityStarted");
   gpg::AndroidSupport::OnActivityStarted(env, activity);
 }
 
 JNIEXPORT void
 Java_com_google_example_games_ButtonClicker_ButtonClickerNativeActivity_nativeOnActivityStopped(
     JNIEnv *env, jobject thiz, jobject activity) {
+  LOGI("ButtonClickerNativeActivity nativeOnActivityStarted");
   gpg::AndroidSupport::OnActivityStopped(env, activity);
 }
 }
